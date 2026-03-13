@@ -1,0 +1,11 @@
+{
+  "name": "op-rift",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vite",
+    "netlify": "netlify dev"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}

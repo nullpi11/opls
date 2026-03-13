@@ -1,0 +1,1180 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>팀 분석기 — LoL 전적 분석</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+/* ══════════════════════════════════════════
+   BASE
+══════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --gold:        #C8963C;
+  --gold-bright: #F0C060;
+  --gold-dark:   #7A5C28;
+  --gold-dim:    #3A2A10;
+  --bg:          #050C17;
+  --bg2:         #091422;
+  --bg3:         #0D1C30;
+  --bg4:         #122038;
+  --cyan:        #0BC4E3;
+  --red:         #E0404A;
+  --green:       #4EC890;
+  --txt:         #C8AA6E;
+  --txt2:        #8A7A60;
+  --txt3:        #4A4030;
+  --border:      rgba(200,150,60,0.22);
+  --border2:     rgba(200,150,60,0.12);
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--txt);
+  font-family: 'Noto Sans KR', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* animated bg texture */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(200,150,60,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(200,150,60,0.025) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+body::after {
+  content: '';
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(ellipse 55% 35% at 10% 5%,  rgba(11,196,227,0.055) 0%, transparent 65%),
+    radial-gradient(ellipse 45% 45% at 92% 95%, rgba(200,150,60,0.07)  0%, transparent 65%);
+}
+
+/* ══════════════════════════════════════════
+   LAYOUT
+══════════════════════════════════════════ */
+#app {
+  position: relative; z-index: 1;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 24px 100px;
+}
+
+/* ══════════════════════════════════════════
+   HEADER
+══════════════════════════════════════════ */
+.header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 56px 0 40px;
+  gap: 10px;
+}
+
+.logo-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.logo-rule {
+  width: 100px; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold));
+}
+.logo-rule.flip { background: linear-gradient(90deg, var(--gold), transparent); }
+
+.logo {
+  font-family: 'Cinzel', serif;
+  font-size: 2.8rem;
+  font-weight: 900;
+  color: var(--gold);
+  letter-spacing: 10px;
+  text-shadow:
+    0 0 30px rgba(200,150,60,0.45),
+    0 0 60px rgba(200,150,60,0.18),
+    0 2px 4px rgba(0,0,0,0.8);
+}
+
+.logo-tagline {
+  font-size: 0.68rem;
+  letter-spacing: 5px;
+  color: var(--txt2);
+  text-transform: uppercase;
+}
+
+/* ══════════════════════════════════════════
+   SEARCH PANEL
+══════════════════════════════════════════ */
+.search-panel {
+  background: linear-gradient(140deg, var(--bg3) 0%, var(--bg2) 100%);
+  border: 1px solid var(--border);
+  padding: 22px 26px 32px;
+  margin-bottom: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.search-panel::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold) 25%, var(--gold-bright) 50%, var(--gold) 75%, transparent);
+}
+
+.search-inner {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.field-group.grow { flex: 1; }
+.field-group.w120 { width: 120px; flex-shrink: 0; }
+.field-group.w100 { width: 100px; flex-shrink: 0; }
+
+/* 단일 입력창 힌트 */
+.combined-input-wrap { position: relative; }
+.combined-input { padding-right: 14px; letter-spacing: 0.3px; }
+.input-hint {
+  position: absolute;
+  bottom: -18px; left: 2px;
+  font-size: 0.62rem;
+  letter-spacing: 1.5px;
+  color: var(--gold);
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.field-label {
+  font-size: 0.6rem;
+  letter-spacing: 2.5px;
+  color: var(--txt2);
+  text-transform: uppercase;
+}
+
+.field {
+  background: rgba(0,0,0,0.35);
+  border: 1px solid var(--border);
+  color: var(--txt);
+  font-family: 'Noto Sans KR', sans-serif;
+  font-size: 0.88rem;
+  font-weight: 500;
+  padding: 10px 14px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  width: 100%;
+}
+.field::placeholder { color: var(--txt3); }
+.field:focus {
+  border-color: var(--gold);
+  background: rgba(0,0,0,0.5);
+  box-shadow: 0 0 0 1px rgba(200,150,60,0.18);
+}
+select.field { cursor: pointer; }
+
+.btn-search {
+  height: 42px;
+  padding: 0 28px;
+  background: linear-gradient(135deg, var(--gold-dark) 0%, var(--gold) 55%, var(--gold-bright) 100%);
+  border: none;
+  color: var(--gold-dim);
+  font-family: 'Cinzel', serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+  transition: opacity 0.2s, transform 0.15s;
+}
+.btn-search::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, transparent 40%, rgba(255,255,255,0.12));
+}
+.btn-search:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
+.btn-search:active:not(:disabled) { transform: translateY(0); opacity: 1; }
+.btn-search:disabled { opacity: 0.3; cursor: not-allowed; transform: none; }
+
+/* ══════════════════════════════════════════
+   SUMMONER CHIPS (top slot row)
+══════════════════════════════════════════ */
+.chips-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 18px;
+  background: rgba(9,20,34,0.75);
+  border: 1px solid var(--border2);
+  margin-bottom: 24px;
+}
+
+.chips-label {
+  font-size: 0.6rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--txt2);
+  flex-shrink: 0;
+  padding-right: 12px;
+  border-right: 1px solid var(--border2);
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px 5px 5px;
+  background: rgba(200,150,60,0.07);
+  border: 1px solid rgba(200,150,60,0.28);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  animation: chipIn 0.3s ease both;
+}
+@keyframes chipIn { from { opacity:0; transform:scale(0.9); } to { opacity:1; transform:scale(1); } }
+.chip:hover { background: rgba(200,150,60,0.15); border-color: var(--gold); }
+
+.chip-av {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(200,150,60,0.2);
+  border: 1px solid var(--gold-dark);
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.6rem; color: var(--gold); font-weight: 700;
+}
+.chip-av img { width: 100%; height: 100%; object-fit: cover; }
+.chip-text { line-height: 1.2; }
+.chip-name { font-size: 0.76rem; font-weight: 700; color: var(--txt); }
+.chip-tier { font-size: 0.58rem; color: var(--txt2); }
+.chip-del {
+  background: none; border: none; color: var(--txt2);
+  font-size: 0.68rem; cursor: pointer; padding: 0 2px;
+  margin-left: 2px; line-height: 1;
+  transition: color 0.15s;
+}
+.chip-del:hover { color: var(--red); }
+
+.chips-empty { font-size: 0.76rem; color: var(--txt2); opacity: 0.5; }
+
+/* ══════════════════════════════════════════
+   COMPARE SECTION
+══════════════════════════════════════════ */
+.compare-wrap {
+  background: linear-gradient(140deg, var(--bg3), var(--bg2));
+  border: 1px solid var(--border);
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  position: relative;
+}
+.compare-wrap::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+}
+
+.compare-heading {
+  font-family: 'Cinzel', serif;
+  font-size: 0.68rem;
+  letter-spacing: 3px;
+  color: var(--cyan);
+  margin-bottom: 18px;
+  text-transform: uppercase;
+}
+
+.compare-cols {
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+}
+
+.compare-col { flex: 1; min-width: 130px; }
+
+.compare-col-head {
+  font-size: 0.6rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--txt2);
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border2);
+}
+
+.cmp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.cmp-name {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--txt);
+  width: 70px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.cmp-track {
+  flex: 1;
+  height: 4px;
+  background: rgba(255,255,255,0.05);
+  overflow: hidden;
+}
+.cmp-bar { height: 100%; transition: width 1s cubic-bezier(0.22,1,0.36,1); }
+.cmp-val {
+  font-size: 0.68rem;
+  color: var(--txt2);
+  width: 36px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* ══════════════════════════════════════════
+   CARD GRID
+══════════════════════════════════════════ */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 20px;
+}
+
+/* ══════════════════════════════════════════
+   PLAYER CARD
+══════════════════════════════════════════ */
+.pcard {
+  background: linear-gradient(160deg, var(--bg4) 0%, var(--bg2) 100%);
+  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+  animation: cardIn 0.5s cubic-bezier(0.22,1,0.36,1) both;
+  transition: border-color 0.25s, box-shadow 0.25s;
+}
+.pcard:hover {
+  border-color: rgba(200,150,60,0.5);
+  box-shadow: 0 0 28px rgba(200,150,60,0.1);
+}
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(18px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+/* shimmer top border */
+.pcard::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent 5%, var(--gold) 30%, var(--gold-bright) 50%, var(--gold) 70%, transparent 95%);
+}
+
+/* corner glow */
+.pcard::after {
+  content: '';
+  position: absolute; bottom: -20px; right: -20px;
+  width: 80px; height: 80px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(200,150,60,0.06), transparent 70%);
+  pointer-events: none;
+}
+
+/* ── HEAD ── */
+.pc-head {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 16px 18px 13px;
+  border-bottom: 1px solid var(--border2);
+}
+
+.pc-av-wrap { position: relative; flex-shrink: 0; }
+.pc-av {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  border: 2px solid var(--gold-dark);
+  overflow: hidden;
+  background: rgba(200,150,60,0.15);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Cinzel', serif;
+  font-size: 1.2rem; color: var(--gold); font-weight: 700;
+}
+.pc-av img { width: 100%; height: 100%; object-fit: cover; }
+.pc-level {
+  position: absolute; bottom: -3px; right: -4px;
+  background: var(--bg);
+  border: 1px solid var(--gold-dark);
+  font-size: 0.48rem; color: var(--gold); font-weight: 700;
+  padding: 1px 4px;
+  letter-spacing: 0.5px;
+}
+
+.pc-info { flex: 1; min-width: 0; }
+.pc-name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #E8D898;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.3px;
+}
+.pc-tag {
+  font-size: 0.65rem;
+  color: var(--txt2);
+  margin-top: 2px;
+}
+
+/* ── TIER BADGE ── */
+.tier-badge {
+  font-family: 'Cinzel', serif;
+  font-size: 0.63rem; font-weight: 700;
+  letter-spacing: 0.8px;
+  padding: 4px 10px;
+  border: 1px solid;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.t-gray    { color: #909098; border-color: rgba(144,144,152,0.38); background: rgba(144,144,152,0.07); }
+.t-gold    { color: #C89640; border-color: rgba(200,150,64,0.5);   background: rgba(200,150,64,0.1); }
+.t-plat    { color: #4CC8B0; border-color: rgba(76,200,176,0.5);   background: rgba(76,200,176,0.1); }
+.t-emer    { color: #4EC878; border-color: rgba(78,200,120,0.5);   background: rgba(78,200,120,0.1); }
+.t-dia     { color: #9878D8; border-color: rgba(152,120,216,0.5);  background: rgba(152,120,216,0.1); }
+.t-master  { color: #E040A8; border-color: rgba(224,64,168,0.5);   background: rgba(224,64,168,0.1); }
+
+/* ── TABS ── */
+.pc-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border2);
+}
+.pc-tab {
+  flex: 1;
+  padding: 8px 4px;
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: var(--txt2);
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 2px solid transparent;
+  transition: color 0.18s;
+}
+.pc-tab:hover { color: var(--txt); }
+.pc-tab.on {
+  color: var(--gold);
+  border-bottom-color: var(--gold);
+  background: rgba(200,150,60,0.06);
+}
+
+/* ── BODY ── */
+.pc-body { padding: 16px 18px; }
+
+.no-data-msg {
+  text-align: center;
+  padding: 22px 0;
+  color: var(--txt2);
+  font-size: 0.78rem;
+  letter-spacing: 0.5px;
+}
+
+/* WR BLOCK */
+.wr-block {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border2);
+}
+
+/* donut */
+.donut { position: relative; flex-shrink: 0; width: 66px; height: 66px; }
+.donut svg { transform: rotate(-90deg); display: block; }
+.d-track { fill: none; stroke: rgba(255,255,255,0.055); stroke-width: 6; }
+.d-fill  { fill: none; stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 1.1s cubic-bezier(0.22,1,0.36,1); }
+.d-label {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+}
+.d-pct { font-size: 0.92rem; font-weight: 700; line-height: 1; }
+.d-sub { font-size: 0.46rem; color: var(--txt2); letter-spacing: 0.5px; margin-top: 2px; }
+
+/* wr right side */
+.wr-right { flex: 1; }
+.wr-rec { font-size: 0.76rem; color: var(--txt2); margin-bottom: 5px; }
+.wr-rec strong { color: var(--txt); }
+.wr-bar-bg { height: 5px; background: rgba(255,255,255,0.055); margin-bottom: 8px; overflow: hidden; }
+.wr-bar-fg { height: 100%; transition: width 1.1s cubic-bezier(0.22,1,0.36,1); opacity: 0.8; }
+.wr-kda    { font-size: 0.74rem; color: var(--txt2); }
+.wr-kda strong { color: var(--txt); font-weight: 600; }
+.wr-lp { font-size: 0.64rem; color: var(--cyan); margin-top: 4px; letter-spacing: 0.5px; }
+
+/* SECTION LABEL */
+.sec-label {
+  font-size: 0.58rem;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--txt2);
+  margin-bottom: 10px;
+}
+
+/* LINE ROWS */
+.line-rows { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+.line-row  { display: flex; align-items: center; gap: 8px; }
+.line-ico  {
+  width: 20px; height: 20px;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.line-ico svg { width: 14px; height: 14px; }
+.line-nm {
+  font-size: 0.74rem; font-weight: 700;
+  color: var(--txt); width: 46px; flex-shrink: 0;
+}
+.line-track { flex: 1; height: 4px; background: rgba(255,255,255,0.055); overflow: hidden; }
+.line-bar { height: 100%; transition: width 1.1s cubic-bezier(0.22,1,0.36,1); }
+.TOP     { background: linear-gradient(90deg, #E0A030, rgba(224,160,48,0.35)); }
+.JUNGLE  { background: linear-gradient(90deg, #4BC884, rgba(75,200,132,0.35)); }
+.MIDDLE  { background: linear-gradient(90deg, #4B8CE0, rgba(75,140,224,0.35)); }
+.BOTTOM  { background: linear-gradient(90deg, #E05048, rgba(224,80,72,0.35)); }
+.UTILITY { background: linear-gradient(90deg, #A060D8, rgba(160,96,216,0.35)); }
+.line-pct { font-size: 0.68rem; color: var(--txt2); width: 26px; text-align: right; flex-shrink: 0; }
+
+/* CHAMP CHIPS */
+.champ-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.champ-chip {
+  display: flex; align-items: center; gap: 5px;
+  background: rgba(200,150,60,0.06);
+  border: 1px solid rgba(200,150,60,0.15);
+  padding: 4px 9px 4px 4px;
+  font-size: 0.68rem; font-weight: 700; color: var(--txt);
+  transition: background 0.18s, border-color 0.18s;
+  cursor: default;
+}
+.champ-chip:hover { background: rgba(200,150,60,0.13); border-color: rgba(200,150,60,0.38); }
+.champ-ico {
+  width: 20px; height: 20px;
+  border-radius: 50%; overflow: hidden;
+  background: rgba(200,150,60,0.2);
+  flex-shrink: 0;
+}
+.champ-ico img { width: 100%; height: 100%; object-fit: cover; }
+
+/* ── EMPTY / ERROR ── */
+.grid-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 90px 20px;
+  color: var(--txt2);
+}
+.grid-empty-glyph {
+  font-family: 'Cinzel', serif;
+  font-size: 4.5rem;
+  color: var(--gold);
+  opacity: 0.12;
+  display: block;
+  margin-bottom: 18px;
+}
+.grid-empty-txt { font-size: 0.84rem; letter-spacing: 0.5px; line-height: 1.7; }
+
+.card-err { padding: 26px 18px; text-align: center; }
+.card-err-ico { font-size: 1.8rem; margin-bottom: 8px; }
+.card-err-msg { font-size: 0.76rem; color: var(--red); line-height: 1.6; }
+
+/* ══════════════════════════════════════════
+   OVERLAY / TOAST
+══════════════════════════════════════════ */
+.overlay {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(3,8,16,0.9);
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(8px);
+}
+.overlay.off { display: none; }
+
+.spin-box { text-align: center; }
+.spin-ring {
+  width: 50px; height: 50px;
+  border: 3px solid rgba(200,150,60,0.15);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: spin 0.72s linear infinite;
+  margin: 0 auto 16px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin-txt { font-size: 0.76rem; letter-spacing: 2px; color: var(--txt2); }
+
+.toast-el {
+  position: fixed; bottom: 34px; left: 50%; transform: translateX(-50%);
+  padding: 10px 24px;
+  background: rgba(5,12,22,0.97);
+  border: 1px solid rgba(200,150,60,0.38);
+  color: var(--txt);
+  font-size: 0.8rem; letter-spacing: 0.3px;
+  z-index: 600;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.28s;
+  white-space: nowrap;
+}
+.toast-el.show { opacity: 1; }
+
+/* ══════════════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════════════ */
+@media (max-width: 660px) {
+  .logo { font-size: 2rem; letter-spacing: 6px; }
+  .logo-rule { width: 60px; }
+  .card-grid { grid-template-columns: 1fr; }
+  .search-inner { flex-wrap: wrap; }
+  .field-group.w120, .field-group.w100 { flex: 1; }
+  .compare-cols { gap: 14px; }
+}
+</style>
+</head>
+<body>
+
+<!-- LOADING OVERLAY -->
+<div class="overlay off" id="overlay">
+  <div class="spin-box">
+    <div class="spin-ring"></div>
+    <div class="spin-txt" id="spinTxt">데이터 불러오는 중…</div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast-el" id="toast"></div>
+
+<div id="app">
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="logo-row">
+      <div class="logo-rule"></div>
+      <h1 class="logo">팀 분석기</h1>
+      <div class="logo-rule flip"></div>
+    </div>
+    <p class="logo-tagline">League of Legends · 전적 분석 대시보드</p>
+  </header>
+
+  <!-- SEARCH -->
+  <div class="search-panel">
+    <div class="search-inner">
+      <div class="field-group grow">
+        <div class="field-label">소환사명 # 태그</div>
+        <div class="combined-input-wrap">
+          <input class="field combined-input" id="summonerInput"
+            placeholder="소환사명#태그" autocomplete="off" spellcheck="false" />
+          <div class="input-hint" id="inputHint"></div>
+        </div>
+      </div>
+      <div class="field-group w100">
+        <div class="field-label">서버</div>
+        <select class="field" id="regionSelect">
+          <option value="KR">KR</option>
+          <option value="EUW">EUW</option>
+          <option value="NA">NA</option>
+          <option value="JP">JP</option>
+          <option value="EUN">EUN</option>
+          <option value="BR">BR</option>
+        </select>
+      </div>
+      <button class="btn-search" id="searchBtn" onclick="handleAdd()">검색 추가</button>
+    </div>
+  </div>
+
+  <!-- CHIPS BAR -->
+  <div class="chips-bar" id="chipsBar">
+    <div class="chips-label">소환사</div>
+    <div class="chips-empty" id="chipsEmpty">추가된 소환사 없음 · 최대 5명</div>
+  </div>
+
+  <!-- COMPARE -->
+  <div class="compare-wrap" id="cmpWrap" style="display:none">
+    <div class="compare-heading">▸ 비교 분석 — 솔로랭크 기준</div>
+    <div class="compare-cols" id="cmpCols"></div>
+  </div>
+
+  <!-- GRID -->
+  <div class="card-grid" id="cardGrid">
+    <div class="grid-empty">
+      <span class="grid-empty-glyph">⚔</span>
+      <div class="grid-empty-txt">소환사명과 태그를 입력하고<br>검색 추가 버튼을 눌러주세요</div>
+    </div>
+  </div>
+
+</div><!-- /app -->
+
+<script>
+/* ════════════════════════════════════════
+   ★ API 키 설정 ★
+
+   [로컬 개발 - npm run dev]
+     아래 API_KEY 에 직접 입력하세요.
+     테스트 키는 24시간마다 갱신이 필요합니다.
+
+   [Netlify 배포]
+     API_KEY 는 빈 문자열로 두세요.
+     Netlify 환경변수 RIOT_API_KEY 에서 자동으로 읽습니다.
+════════════════════════════════════════ */
+const API_KEY = 'YOUR_API_KEY_HERE'
+/* ════════════════════════════════════════ */
+
+const DDV = '14.10.1'           // DataDragon 버전
+const MATCH_FETCH  = 40         // 가져올 매치 ID 수
+const MATCH_DETAIL = 20         // 상세 조회할 매치 수 (rate limit 고려)
+const MAX_PLAYERS  = 5
+
+// Vite 프록시 prefix → 실제 host 매핑
+const R = {
+  KR:  { plat: '/api/kr',   reg: '/api/asia'     },
+  EUW: { plat: '/api/euw1', reg: '/api/europe'   },
+  NA:  { plat: '/api/na1',  reg: '/api/americas' },
+  JP:  { plat: '/api/jp1',  reg: '/api/asia'     },
+  EUN: { plat: '/api/eun1', reg: '/api/europe'   },
+  BR:  { plat: '/api/br1',  reg: '/api/americas' },
+}
+
+const LINE_KR    = { TOP:'탑', JUNGLE:'정글', MIDDLE:'미드', BOTTOM:'원딜', UTILITY:'서폿' }
+const LINE_COLOR = { TOP:'#E0A030', JUNGLE:'#4BC884', MIDDLE:'#4B8CE0', BOTTOM:'#E05048', UTILITY:'#A060D8' }
+const LINE_ICON  = {
+  TOP:     `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 2h5v2H4v3H2V2zm9 9h3v5h-5v-2h2V11zm-9 2h2v2h3v2H2v-4zM11 2h3v4h-2V4h-1V2z"/></svg>`,
+  JUNGLE:  `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1l2 4h4l-3 3 1 5-4-2-4 2 1-5-3-3h4z"/></svg>`,
+  MIDDLE:  `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 14l5-5-2-2 7-5-5 7 2 2z"/></svg>`,
+  BOTTOM:  `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M14 14H9v-2h3v-3h2v5zM2 7H0V2h5v2H2v3zm5 2l-4 5 5-4v4l5-8-5 4V9z"/></svg>`,
+  UTILITY: `<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a5 5 0 110 10A5 5 0 018 3zm0 2a3 3 0 100 6 3 3 0 000-6z"/></svg>`,
+}
+
+const pIcon = id   => `https://ddragon.leagueoflegends.com/cdn/${DDV}/img/profileicon/${id||1}.png`
+const cIcon = name => `https://ddragon.leagueoflegends.com/cdn/${DDV}/img/champion/${name.replace(/[\s']/g,'')}.png`
+const enc   = s    => encodeURIComponent(s)
+
+/* ── RIOT FETCH ──
+   로컬(npm run dev) : X-Riot-Token 헤더로 직접 호출 (Vite 프록시)
+   Netlify 배포      : API 키 없이 호출 → 서버 함수가 환경변수로 처리
+*/
+async function rFetch(prefix, path) {
+  const isLocal = !!API_KEY  // API_KEY가 있으면 로컬 개발 모드
+  const headers = isLocal ? { 'X-Riot-Token': API_KEY } : {}
+
+  const res = await fetch(`${prefix}${path}`, { headers })
+  if (!res.ok) {
+    const j = await res.json().catch(() => ({}))
+    throw new Error(j?.status?.message || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+/* ── FETCH PLAYER ── */
+async function fetchPlayer(gameName, tagLine, region) {
+  const r = R[region] || R.KR
+
+  // 1. PUUID
+  const acct = await rFetch(r.reg,
+    `/riot/account/v1/accounts/by-riot-id/${enc(gameName)}/${enc(tagLine)}`)
+  const { puuid } = acct
+
+  // 2. Summoner
+  const smn = await rFetch(r.plat,
+    `/lol/summoner/v4/summoners/by-puuid/${puuid}`)
+
+  // 3. Rank entries
+  const leagues = await rFetch(r.plat,
+    `/lol/league/v4/entries/by-summoner/${smn.id}`)
+
+  // 4. Match IDs
+  const [soloIds, flexIds] = await Promise.all([
+    rFetch(r.reg, `/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=420&count=${MATCH_FETCH}`),
+    rFetch(r.reg, `/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=440&count=${MATCH_FETCH}`),
+  ])
+
+  // 5. Match details
+  const loadDetails = ids =>
+    Promise.all(ids.slice(0, MATCH_DETAIL).map(id =>
+      rFetch(r.reg, `/lol/match/v5/matches/${id}`).catch(() => null)
+    )).then(arr => arr.filter(Boolean))
+
+  const [soloMatches, flexMatches] = await Promise.all([
+    loadDetails(soloIds),
+    loadDetails(flexIds),
+  ])
+
+  // 6. Stats
+  function crunch(matches) {
+    const lineCnt = {}, champByLine = {}
+    let k = 0, d = 0, a = 0, w = 0
+
+    for (const m of matches) {
+      const me = m.info.participants.find(p => p.puuid === puuid)
+      if (!me) continue
+      const line = (me.teamPosition || me.individualPosition || '').toUpperCase()
+      if (line && line !== 'INVALID') {
+        lineCnt[line] = (lineCnt[line] || 0) + 1
+        if (!champByLine[line]) champByLine[line] = {}
+        champByLine[line][me.championName] = (champByLine[line][me.championName] || 0) + 1
+      }
+      k += me.kills; d += me.deaths; a += me.assists
+      if (me.win) w++
+    }
+
+    const total = matches.length
+    const lineRatio = {}
+    for (const [l, c] of Object.entries(lineCnt))
+      lineRatio[l] = Math.round(c / total * 100)
+
+    const topChampsByLine = {}
+    for (const [l, obj] of Object.entries(champByLine))
+      topChampsByLine[l] = Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,5).map(e=>e[0])
+
+    return {
+      total, wins: w,
+      lineRatio, topChampsByLine,
+      avgK: (k / Math.max(total,1)).toFixed(1),
+      avgD: (d / Math.max(total,1)).toFixed(1),
+      avgA: (a / Math.max(total,1)).toFixed(1),
+      kda:  ((k + a) / Math.max(d, 1)).toFixed(2),  // overall KDA
+    }
+  }
+
+  const mkRank = (league, matches) => {
+    const l = league || {}
+    const wins = l.wins || 0, losses = l.losses || 0
+    return {
+      tier:    l.tier || 'UNRANKED',
+      rank:    l.rank || '',
+      lp:      l.leaguePoints || 0,
+      wins, losses,
+      winRate: wins ? Math.round(wins / (wins + losses) * 100) : 0,
+      ...crunch(matches),
+    }
+  }
+
+  return {
+    name: `${gameName}#${tagLine}`,
+    region,
+    profileIconId: smn.profileIconId,
+    summonerLevel: smn.summonerLevel,
+    solo: mkRank(leagues.find(l => l.queueType === 'RANKED_SOLO_5x5'), soloMatches),
+    flex: mkRank(leagues.find(l => l.queueType === 'RANKED_FLEX_SR'),  flexMatches),
+  }
+}
+
+/* ════════════════════════════════════════
+   STATE
+════════════════════════════════════════ */
+let players  = []
+let cardTabs = {}   // index → 'solo' | 'flex'
+
+const getTab = i  => cardTabs[i] || 'solo'
+const setTab = (i, t) => { cardTabs[i] = t; renderCards() }
+
+/* ── ADD ── */
+async function handleAdd() {
+  const raw    = document.getElementById('summonerInput').value.trim()
+  const region = document.getElementById('regionSelect').value
+
+  // # 기준으로 분리
+  const hashIdx = raw.indexOf('#')
+  if (hashIdx === -1 || hashIdx === 0 || hashIdx === raw.length - 1) {
+    toast('NullPi#Null 형식으로 입력하세요')
+    return
+  }
+  const name = raw.slice(0, hashIdx).trim()
+  const tag  = raw.slice(hashIdx + 1).trim()
+
+  if (!name || !tag)                 { toast('소환사명과 태그를 입력하세요'); return }
+  if (players.length >= MAX_PLAYERS) { toast(`최대 ${MAX_PLAYERS}명까지 추가할 수 있습니다`); return }
+  const uid = `${name}#${tag}`.toLowerCase()
+  if (players.find(p => p.name.toLowerCase() === uid)) { toast('이미 추가된 소환사입니다'); return }
+
+  showOverlay(`${name}#${tag} 불러오는 중…`)
+  document.getElementById('searchBtn').disabled = true
+
+  try {
+    const data = await fetchPlayer(name, tag, region)
+    players.push(data)
+    document.getElementById('summonerInput').value = ''
+    updateInputHint('')
+    renderAll()
+  } catch(e) {
+    toast('오류: ' + e.message)
+    console.error(e)
+  } finally {
+    hideOverlay()
+    document.getElementById('searchBtn').disabled = false
+  }
+}
+
+/* ── REMOVE ── */
+function removePlayer(i) {
+  players.splice(i, 1)
+  const nt = {}
+  for (const k of Object.keys(cardTabs)) {
+    const ki = +k
+    if (ki < i) nt[k] = cardTabs[k]
+    else if (ki > i) nt[ki - 1] = cardTabs[k]
+  }
+  cardTabs = nt
+  renderAll()
+}
+
+/* ════════════════════════════════════════
+   RENDER
+════════════════════════════════════════ */
+function renderAll() {
+  renderChips()
+  renderCards()
+  renderCompare()
+}
+
+/* ── CHIPS ── */
+function renderChips() {
+  const bar   = document.getElementById('chipsBar')
+  const empty = document.getElementById('chipsEmpty')
+  bar.querySelectorAll('.chip').forEach(el => el.remove())
+  empty.style.display = players.length ? 'none' : ''
+
+  players.forEach((p, i) => {
+    const d    = p.solo
+    const tier = d.tier || 'UNRANKED'
+    const tierTxt = tier === 'UNRANKED' ? 'Unranked' : `${tier} ${d.rank} · ${d.lp} LP`
+
+    const chip = document.createElement('div')
+    chip.className = 'chip'
+    chip.onclick = () => goToCard(i)
+    chip.innerHTML = `
+      <div class="chip-av">
+        <img src="${pIcon(p.profileIconId)}" onerror="this.style.display='none'" />
+      </div>
+      <div class="chip-text">
+        <div class="chip-name">${p.name.split('#')[0]}</div>
+        <div class="chip-tier">${tierTxt}</div>
+      </div>
+      <button class="chip-del" onclick="event.stopPropagation(); removePlayer(${i})">✕</button>`
+    bar.appendChild(chip)
+  })
+}
+
+/* ── CARDS ── */
+function renderCards() {
+  const grid = document.getElementById('cardGrid')
+  if (!players.length) {
+    grid.innerHTML = `<div class="grid-empty"><span class="grid-empty-glyph">⚔</span><div class="grid-empty-txt">소환사명과 태그를 입력하고<br>검색 추가 버튼을 눌러주세요</div></div>`
+    return
+  }
+  grid.innerHTML = players.map(buildCard).join('')
+}
+
+function tierClass(tier) {
+  const t = (tier || '').toUpperCase()
+  if (['IRON','BRONZE','SILVER'].includes(t)) return 't-gray'
+  if (t === 'GOLD')      return 't-gold'
+  if (t === 'PLATINUM')  return 't-plat'
+  if (t === 'EMERALD')   return 't-emer'
+  if (t === 'DIAMOND')   return 't-dia'
+  if (['MASTER','GRANDMASTER','CHALLENGER'].includes(t)) return 't-master'
+  return 't-gray'
+}
+
+function buildCard(p, i) {
+  const tab  = getTab(i)
+  const d    = tab === 'solo' ? p.solo : p.flex
+  const tier = (d.tier || 'UNRANKED').toUpperCase()
+  const tierTxt = tier === 'UNRANKED' ? 'UNRANKED' : `${d.tier} ${d.rank}`
+
+  const isUnranked = tier === 'UNRANKED' && !d.wins && !d.losses
+
+  const R = 28
+  const C = 2 * Math.PI * R
+  const wr = d.winRate || 0
+  const wrColor = wr >= 55 ? '#4EC890' : wr >= 50 ? '#C8963C' : '#E0404A'
+
+  const lines    = Object.entries(d.lineRatio || {}).sort((a,b) => b[1] - a[1])
+  const topLine  = lines[0]?.[0]
+  const topChamps = topLine ? (d.topChampsByLine?.[topLine] || []) : []
+
+  return `
+  <div class="pcard" id="pc${i}" style="animation-delay:${i * 0.07}s">
+
+    <div class="pc-head">
+      <div class="pc-av-wrap">
+        <div class="pc-av">
+          <img src="${pIcon(p.profileIconId)}" onerror="this.style.display='none'" />
+        </div>
+        <div class="pc-level">${p.summonerLevel}</div>
+      </div>
+      <div class="pc-info">
+        <div class="pc-name">${p.name.split('#')[0]}</div>
+        <div class="pc-tag">#${p.name.split('#')[1]} · ${p.region}</div>
+      </div>
+      <div class="tier-badge ${tierClass(tier)}">${tierTxt}</div>
+    </div>
+
+    <div class="pc-tabs">
+      <div class="pc-tab ${tab === 'solo' ? 'on' : ''}" onclick="setTab(${i},'solo')">솔로랭크</div>
+      <div class="pc-tab ${tab === 'flex' ? 'on' : ''}" onclick="setTab(${i},'flex')">자유랭크</div>
+    </div>
+
+    <div class="pc-body">
+      ${isUnranked
+        ? `<div class="no-data-msg">이 시즌 배치 기록 없음</div>`
+        : `<div class="wr-block">
+            <div class="donut">
+              <svg width="66" height="66" viewBox="0 0 66 66">
+                <circle class="d-track" cx="33" cy="33" r="${R}"/>
+                <circle class="d-fill"  cx="33" cy="33" r="${R}"
+                  stroke="${wrColor}"
+                  stroke-dasharray="${C.toFixed(2)}"
+                  stroke-dashoffset="${(C - wr/100*C).toFixed(2)}"/>
+              </svg>
+              <div class="d-label">
+                <span class="d-pct" style="color:${wrColor}">${wr}%</span>
+                <span class="d-sub">승률</span>
+              </div>
+            </div>
+            <div class="wr-right">
+              <div class="wr-rec"><strong>${d.wins}승 ${d.losses}패</strong> · ${d.wins+d.losses}게임</div>
+              <div class="wr-bar-bg"><div class="wr-bar-fg" style="width:${wr}%;background:${wrColor}"></div></div>
+              <div class="wr-kda">평균 <strong>${d.avgK} / ${d.avgD} / ${d.avgA}</strong></div>
+              <div class="wr-lp">◆ ${d.lp} LP</div>
+            </div>
+          </div>`}
+
+      ${lines.length
+        ? `<div class="sec-label">라인 비중 · 최근 ${d.total}게임</div>
+           <div class="line-rows">
+             ${lines.map(([line, pct]) => `
+             <div class="line-row">
+               <div class="line-ico" style="color:${LINE_COLOR[line]||'#888'}">${LINE_ICON[line]||''}</div>
+               <div class="line-nm">${LINE_KR[line]||line}</div>
+               <div class="line-track"><div class="line-bar ${line}" style="width:${pct}%"></div></div>
+               <div class="line-pct">${pct}%</div>
+             </div>`).join('')}
+           </div>`
+        : `<div class="no-data-msg" style="padding:10px 0">최근 매치 데이터 없음</div>`}
+
+      ${topChamps.length
+        ? `<div class="sec-label">주 챔피언 · ${LINE_KR[topLine]||topLine}</div>
+           <div class="champ-row">
+             ${topChamps.slice(0,5).map(c => `
+             <div class="champ-chip">
+               <div class="champ-ico"><img src="${cIcon(c)}" onerror="this.style.display='none'"/></div>
+               ${c.length > 9 ? c.slice(0,8)+'…' : c}
+             </div>`).join('')}
+           </div>`
+        : ''}
+    </div>
+  </div>`
+}
+
+/* ── COMPARE ── */
+function renderCompare() {
+  const wrap = document.getElementById('cmpWrap')
+  if (players.length < 2) { wrap.style.display = 'none'; return }
+  wrap.style.display = ''
+
+  const S = p => p.solo   // 솔로랭크 기준
+
+  const byWR  = [...players].sort((a,b) => S(b).winRate - S(a).winRate)
+  const maxWR = Math.max(...players.map(p => S(p).winRate), 1)
+
+  const byGames  = [...players].sort((a,b) => (S(b).wins+S(b).losses) - (S(a).wins+S(a).losses))
+  const maxGames = Math.max(...players.map(p => S(p).wins+S(p).losses), 1)
+
+  const byKDA  = [...players].sort((a,b) => parseFloat(S(b).kda) - parseFloat(S(a).kda))
+  const maxKDA = Math.max(...players.map(p => parseFloat(S(p).kda)), 1)
+
+  const col = (label, sorted, valFn, colorFn) => `
+    <div class="compare-col">
+      <div class="compare-col-head">${label}</div>
+      ${sorted.map(p => {
+        const raw = valFn(p)
+        const pct = (raw / colorFn.max * 100).toFixed(1)
+        return `<div class="cmp-row">
+          <div class="cmp-name">${p.name.split('#')[0]}</div>
+          <div class="cmp-track"><div class="cmp-bar" style="width:${pct}%;background:${colorFn.fn(p)}"></div></div>
+          <div class="cmp-val">${raw}${colorFn.suffix||''}</div>
+        </div>`
+      }).join('')}
+    </div>`
+
+  document.getElementById('cmpCols').innerHTML =
+    col('승률', byWR,
+      p => S(p).winRate,
+      { max: maxWR, suffix: '%', fn: p => { const w=S(p).winRate; return w>=55?'#4EC890':w>=50?'#C8963C':'#E0404A' } }) +
+    col('게임 수', byGames,
+      p => S(p).wins + S(p).losses,
+      { max: maxGames, fn: () => 'var(--cyan)' }) +
+    col('KDA', byKDA,
+      p => S(p).kda,
+      { max: maxKDA, fn: p => { const k=parseFloat(S(p).kda); return k>=3?'#4EC890':k>=2?'#C8963C':'#909098' } })
+}
+
+/* ════════════════════════════════════════
+   UTILS
+════════════════════════════════════════ */
+function goToCard(i) {
+  document.getElementById('pc' + i)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
+let toastTimer
+function toast(msg) {
+  const el = document.getElementById('toast')
+  el.textContent = msg
+  el.classList.add('show')
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2800)
+}
+
+function showOverlay(msg) {
+  document.getElementById('spinTxt').textContent = msg
+  document.getElementById('overlay').classList.remove('off')
+}
+function hideOverlay() {
+  document.getElementById('overlay').classList.add('off')
+}
+
+/* 입력 힌트 — # 입력 시 이름/태그 분리 미리보기 */
+function updateInputHint(val) {
+  const hint = document.getElementById('inputHint')
+  if (!hint) return
+  const hashIdx = val.indexOf('#')
+  if (hashIdx > 0 && hashIdx < val.length - 1) {
+    const name = val.slice(0, hashIdx)
+    const tag  = val.slice(hashIdx + 1)
+    hint.textContent = `${name}  #  ${tag}`
+    hint.style.opacity = '1'
+  } else {
+    hint.textContent = ''
+    hint.style.opacity = '0'
+  }
+}
+
+document.getElementById('summonerInput')?.addEventListener('input', e => {
+  updateInputHint(e.target.value.trim())
+})
+
+/* Enter key */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.activeElement?.id === 'summonerInput')
+    handleAdd()
+})
+</script>
+</body>
+</html>
