@@ -1,12 +1,13 @@
 # OP·RIFT — Netlify 설정
-# ─────────────────────────────────────────
 
 [build]
-  publish   = "."          # index.html 이 있는 루트 폴더를 그대로 배포
-  functions = "netlify/functions"  # 서버리스 함수 위치
+  publish   = "."
+  functions = "netlify/functions"
+  command   = ""
 
-# /api/* 요청을 모두 riot Function으로 라우팅
-# 브라우저 → /api/kr/lol/... → /.netlify/functions/riot/api/kr/lol/...
+[build.environment]
+  NODE_VERSION = "18"
+
 [[redirects]]
   from   = "/api/*"
   to     = "/.netlify/functions/riot/api/:splat"
