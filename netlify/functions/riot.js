@@ -32,9 +32,10 @@ exports.handler = async (event) => {
   }
 
   // event.path 예시: /.netlify/functions/riot/api/asia/riot/account/v1/...
-  // /.netlify/functions/riot/ 를 제거하면 → api/asia/riot/account/v1/...
-  const stripped = event.path.replace(/^\/.netlify\/functions\/riot\//, '')
-  const segments = stripped.split('/')
+  // 함수명 이후 전체를 추출: api/asia/riot/account/v1/...
+  const stripped = event.path
+    .replace(/^\/.netlify\/functions\/[^/]+\//, '')  // /.netlify/functions/riot/ 제거
+  const segments = stripped.split('/').filter(Boolean)
 
   // prefix = "api/asia", apiPath = "/riot/account/v1/..."
   const prefix  = segments.slice(0, 2).join('/')
@@ -44,7 +45,8 @@ exports.handler = async (event) => {
   if (!host) {
     return {
       statusCode: 404,
-      body: JSON.stringify({ error: `알 수 없는 리전 prefix: ${prefix}` }),
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ error: `알 수 없는 리전 prefix: "${prefix}" / 전체경로: "${event.path}"` }),
     }
   }
 
