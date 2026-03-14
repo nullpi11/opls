@@ -868,25 +868,74 @@ async function fetchPlayer(gameName, tagLine, region) {
   const smn = await rFetch(r.plat,
     `/lol/summoner/v4/summoners/by-puuid/${puuid}`)
 
-  // 3. Rank entries + Champion Mastery top10 병렬 조회
-  const [leagues, masteries] = await Promise.all([
-    rFetch(r.plat, `/lol/league/v4/entries/by-puuid/${puuid}`),
-    rFetch(r.plat, `/lol/champion-mastery/v4/champion-masteries/by-puuid/${puuid}/top?count=10`)
-      .catch(() => []),
+  // 3. Rank entries
+  const leagues = await rFetch(r.plat,
+    `/lol/league/v4/entries/by-puuid/${puuid}`)
+
+  // 4. Match IDs (솔로/자유 병렬)
+  const [soloIds, flexIds] = await Promise.all([
+    rFetch(r.reg, `/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=420&count=${MATCH_FETCH}`).catch(() => []),
+    rFetch(r.reg, `/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=440&count=${MATCH_FETCH}`).catch(() => []),
   ])
 
-  // masteries 가공 — champIdMap으로 ID→영문명 변환
-  const topChamps = masteries.map(m => {
-    const engName = champIdMap[String(m.championId)] || String(m.championId)
-    return {
-      name: engName,
-      nameKr: champKr(engName),
-      level: m.championLevel,
-      points: m.championPoints,
-    }
-  })
+  // 5. Match details
+  const loadDetails = ids =>
+    Promise.all(ids.slice(0, MATCH_DETAIL).map(id =>
+      rFetch(r.reg, `/lol/match/v5/matches/${id}`).catch(() => null)
+    )).then(arr => arr.filter(Boolean))
 
-  const mkRank = (league) => {
+  const [soloMatches, flexMatches] = await Promise.all([
+    loadDetails(soloIds),
+    loadDetails(flexIds),
+  ])
+
+  // 6. Stats crunch
+  function crunch(matches) {
+    const lineCnt = {}, champByLine = {}, champStatsByLine = {}
+    let k = 0, d = 0, a = 0, w = 0
+
+    for (const m of matches) {
+      const me = m.info.participants.find(p => p.puuid === puuid)
+      if (!me) continue
+      const line = (me.teamPosition || me.individualPosition || '').toUpperCase()
+      if (line && line !== 'INVALID') {
+        lineCnt[line] = (lineCnt[line] || 0) + 1
+        if (!champByLine[line]) champByLine[line] = {}
+        champByLine[line][me.championName] = (champByLine[line][me.championName] || 0) + 1
+        if (!champStatsByLine[line]) champStatsByLine[line] = {}
+        if (!champStatsByLine[line][me.championName])
+          champStatsByLine[line][me.championName] = { games:0, wins:0, kills:0, deaths:0, assists:0 }
+        const cs = champStatsByLine[line][me.championName]
+        cs.games++
+        if (me.win) cs.wins++
+        cs.kills   += me.kills
+        cs.deaths  += me.deaths
+        cs.assists += me.assists
+      }
+      k += me.kills; d += me.deaths; a += me.assists
+      if (me.win) w++
+    }
+
+    const total = matches.length
+    const lineRatio = {}
+    for (const [l, c] of Object.entries(lineCnt))
+      lineRatio[l] = Math.round(c / total * 100)
+
+    const topChampsByLine = {}
+    for (const [l, obj] of Object.entries(champByLine))
+      topChampsByLine[l] = Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,5).map(e=>e[0])
+
+    return {
+      total, wins: w,
+      lineRatio, topChampsByLine, champStatsByLine,
+      avgK: (k / Math.max(total,1)).toFixed(1),
+      avgD: (d / Math.max(total,1)).toFixed(1),
+      avgA: (a / Math.max(total,1)).toFixed(1),
+      kda:  ((k + a) / Math.max(d, 1)).toFixed(2),
+    }
+  }
+
+  const mkRank = (league, matches) => {
     const l = league || {}
     const wins = l.wins || 0, losses = l.losses || 0
     return {
@@ -895,6 +944,7 @@ async function fetchPlayer(gameName, tagLine, region) {
       lp:      l.leaguePoints || 0,
       wins, losses,
       winRate: wins ? Math.round(wins / (wins + losses) * 100) : 0,
+      ...crunch(matches),
     }
   }
 
@@ -903,9 +953,8 @@ async function fetchPlayer(gameName, tagLine, region) {
     region,
     profileIconId: smn.profileIconId,
     summonerLevel: smn.summonerLevel,
-    topChamps,
-    solo: mkRank(leagues.find(l => l.queueType === 'RANKED_SOLO_5x5')),
-    flex: mkRank(leagues.find(l => l.queueType === 'RANKED_FLEX_SR')),
+    solo: mkRank(leagues.find(l => l.queueType === 'RANKED_SOLO_5x5'), soloMatches),
+    flex: mkRank(leagues.find(l => l.queueType === 'RANKED_FLEX_SR'),  flexMatches),
   }
 }
 
@@ -1030,6 +1079,7 @@ function tierClass(tier) {
 
 function buildCard(p, i) {
   const tab     = getTab(i)
+  const selLine = getTabLine(i)
   const d       = tab === 'solo' ? p.solo : p.flex
   const tier    = (d.tier || 'UNRANKED').toUpperCase()
   const tierTxt = tier === 'UNRANKED' ? 'UNRANKED' : `${d.tier} ${d.rank}`
@@ -1038,17 +1088,35 @@ function buildCard(p, i) {
   const Rc = 28, C = 2 * Math.PI * Rc
   const wr = d.winRate || 0
   const wrColor = wr >= 55 ? '#4EC890' : wr >= 50 ? '#C8963C' : '#E0404A'
+  const lines   = Object.entries(d.lineRatio || {}).sort((a,b) => b[1] - a[1])
 
-  const masteryLvlColor = lv => lv >= 7 ? '#C8963C' : lv >= 5 ? '#4B8CE0' : '#555'
+  // 선택된 라인의 챔피언 패널
+  const lineChampPanel = selLine ? (() => {
+    const champs = d.topChampsByLine?.[selLine] || []
+    const stats  = d.champStatsByLine?.[selLine] || {}
+    if (!champs.length) return `<div class="no-data-msg" style="padding:6px 0">데이터 없음</div>`
+    return `<div class="line-champ-panel">
+      ${champs.map(c => {
+        const st = stats[c] || {}
+        const cwr  = st.games ? Math.round(st.wins / st.games * 100) : 0
+        const ckda = st.deaths ? ((st.kills + st.assists) / st.deaths).toFixed(1) : 'Perfect'
+        const cc   = cwr >= 55 ? '#4EC890' : cwr >= 50 ? '#C8963C' : '#E0404A'
+        return `<div class="lcp-row">
+          <div class="lcp-ico"><img src="${cIcon(c)}" onerror="this.style.display='none'"/></div>
+          <div class="lcp-name">${champKr(c)}</div>
+          <div class="lcp-games">${st.games||0}게임</div>
+          <div class="lcp-wr" style="color:${cc}">${cwr}%</div>
+          <div class="lcp-kda">KDA ${ckda}</div>
+        </div>`
+      }).join('')}
+    </div>`
+  })() : ''
 
   return `
   <div class="pcard" id="pc${i}" style="animation-delay:${i * 0.07}s">
-
     <div class="pc-head">
       <div class="pc-av-wrap">
-        <div class="pc-av">
-          <img src="${pIcon(p.profileIconId)}" onerror="this.style.display='none'" />
-        </div>
+        <div class="pc-av"><img src="${pIcon(p.profileIconId)}" onerror="this.style.display='none'" /></div>
         <div class="pc-level">${p.summonerLevel}</div>
       </div>
       <div class="pc-info">
@@ -1059,8 +1127,8 @@ function buildCard(p, i) {
     </div>
 
     <div class="pc-tabs">
-      <div class="pc-tab ${tab === 'solo' ? 'on' : ''}" onclick="setTab(${i},'solo')">솔로랭크</div>
-      <div class="pc-tab ${tab === 'flex' ? 'on' : ''}" onclick="setTab(${i},'flex')">자유랭크</div>
+      <div class="pc-tab ${tab==='solo'?'on':''}" onclick="setTab(${i},'solo')">솔로랭크</div>
+      <div class="pc-tab ${tab==='flex'?'on':''}" onclick="setTab(${i},'flex')">자유랭크</div>
     </div>
 
     <div class="pc-body">
@@ -1070,10 +1138,10 @@ function buildCard(p, i) {
             <div class="donut">
               <svg width="66" height="66" viewBox="0 0 66 66">
                 <circle class="d-track" cx="33" cy="33" r="${Rc}"/>
-                <circle class="d-fill"  cx="33" cy="33" r="${Rc}"
+                <circle class="d-fill" cx="33" cy="33" r="${Rc}"
                   stroke="${wrColor}"
                   stroke-dasharray="${C.toFixed(2)}"
-                  stroke-dashoffset="${(C - wr/100*C).toFixed(2)}"/>
+                  stroke-dashoffset="${(C-wr/100*C).toFixed(2)}"/>
               </svg>
               <div class="d-label">
                 <span class="d-pct" style="color:${wrColor}">${wr}%</span>
@@ -1083,23 +1151,25 @@ function buildCard(p, i) {
             <div class="wr-right">
               <div class="wr-rec"><strong>${d.wins}승 ${d.losses}패</strong> · ${d.wins+d.losses}게임</div>
               <div class="wr-bar-bg"><div class="wr-bar-fg" style="width:${wr}%;background:${wrColor}"></div></div>
+              <div class="wr-kda">평균 <strong>${d.avgK} / ${d.avgD} / ${d.avgA}</strong></div>
               <div class="wr-lp">◆ ${d.lp} LP</div>
             </div>
           </div>`}
 
-      ${p.topChamps?.length
-        ? `<div class="sec-label">숙련 챔피언 TOP ${p.topChamps.length}</div>
-           <div class="mastery-list">
-             ${p.topChamps.map((c, idx) => `
-             <div class="mastery-row">
-               <div class="mastery-rank">${idx + 1}</div>
-               <div class="mastery-ico"><img src="${cIcon(c.name)}" onerror="this.style.display='none'"/></div>
-               <div class="mastery-name">${c.nameKr}</div>
-               <div class="mastery-lv" style="color:${masteryLvlColor(c.level)}">Lv.${c.level}</div>
-               <div class="mastery-pts">${c.points.toLocaleString()}</div>
-             </div>`).join('')}
+      ${lines.length
+        ? `<div class="sec-label">라인 비중 · 최근 ${d.total}게임 <span style="font-size:0.55rem;color:var(--txt3)">(클릭 시 챔피언 확인)</span></div>
+           <div class="line-rows">
+             ${lines.map(([line, pct]) => `
+             <div class="line-row ${selLine===line?'line-selected':''}" onclick="setLine(${i},'${line}')" style="cursor:pointer">
+               <div class="line-ico" style="color:${LINE_COLOR[line]||'#888'}">${LINE_ICON[line]||''}</div>
+               <div class="line-nm">${LINE_KR[line]||line}</div>
+               <div class="line-track"><div class="line-bar ${line}" style="width:${pct}%"></div></div>
+               <div class="line-pct">${pct}%</div>
+               <div class="line-arr">${selLine===line?'▲':'▼'}</div>
+             </div>
+             ${selLine===line ? lineChampPanel : ''}`).join('')}
            </div>`
-        : `<div class="no-data-msg" style="padding:10px 0">챔피언 숙련도 데이터 없음</div>`}
+        : `<div class="no-data-msg" style="padding:10px 0">최근 매치 데이터 없음</div>`}
     </div>
   </div>`
 }
