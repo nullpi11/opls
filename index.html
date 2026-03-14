@@ -556,6 +556,44 @@ select.field { cursor: pointer; }
 .BOTTOM  { background: linear-gradient(90deg, #E05048, rgba(224,80,72,0.35)); }
 .UTILITY { background: linear-gradient(90deg, #A060D8, rgba(160,96,216,0.35)); }
 .line-pct { font-size: 0.68rem; color: var(--txt2); width: 26px; text-align: right; flex-shrink: 0; }
+.line-arr { font-size: 0.5rem; color: var(--txt3); width: 12px; text-align: right; flex-shrink: 0; transition: color 0.2s; }
+
+.line-row { border-radius: 0; transition: background 0.18s; padding: 2px 4px; margin: 0 -4px; }
+.line-row:hover { background: rgba(200,150,60,0.06); }
+.line-selected { background: rgba(200,150,60,0.1) !important; }
+.line-selected .line-arr { color: var(--gold); }
+
+/* 라인별 챔피언 패널 */
+.line-champ-panel {
+  background: rgba(0,0,0,0.25);
+  border-left: 2px solid var(--gold-dark);
+  margin: 4px 0 8px 24px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: fadeIn 0.2s ease;
+}
+@keyframes fadeIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+
+.lcp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lcp-ico {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid var(--gold-dark);
+  flex-shrink: 0;
+  background: rgba(200,150,60,0.1);
+}
+.lcp-ico img { width: 100%; height: 100%; object-fit: cover; }
+.lcp-name  { font-size: 0.76rem; font-weight: 700; color: var(--txt); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lcp-games { font-size: 0.62rem; color: var(--txt2); flex-shrink: 0; }
+.lcp-wr    { font-size: 0.68rem; font-weight: 700; width: 32px; text-align: right; flex-shrink: 0; }
+.lcp-kda   { font-size: 0.62rem; color: var(--txt2); width: 56px; text-align: right; flex-shrink: 0; }
 
 /* CHAMP CHIPS */
 .champ-row { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -766,6 +804,21 @@ const pIcon = id   => `https://ddragon.leagueoflegends.com/cdn/${DDV}/img/profil
 const cIcon = name => `https://ddragon.leagueoflegends.com/cdn/${DDV}/img/champion/${name.replace(/[\s']/g,'')}.png`
 const enc   = s    => encodeURIComponent(s)
 
+/* ── 챔피언 한글 이름 로더 ── */
+let champKrMap = {}  // { "Ahri": "아리", ... }
+async function loadChampKr() {
+  if (Object.keys(champKrMap).length) return  // 이미 로드됨
+  try {
+    const res  = await fetch(`https://ddragon.leagueoflegends.com/cdn/${DDV}/data/ko_KR/champion.json`)
+    const json = await res.json()
+    for (const [key, val] of Object.entries(json.data))
+      champKrMap[key] = val.name  // { "Ahri": "아리" }
+  } catch(e) {
+    console.warn('챔피언 한글 데이터 로드 실패:', e)
+  }
+}
+const champKr = name => champKrMap[name] || name  // 한글 없으면 영문 그대로
+
 /* ── RIOT FETCH ──
    로컬(npm run dev) : X-Riot-Token 헤더로 직접 호출 (Vite 프록시)
    Netlify 배포      : API 키 없이 호출 → 서버 함수가 환경변수로 처리
@@ -818,7 +871,7 @@ async function fetchPlayer(gameName, tagLine, region) {
 
   // 6. Stats
   function crunch(matches) {
-    const lineCnt = {}, champByLine = {}
+    const lineCnt = {}, champByLine = {}, champStatsByLine = {}
     let k = 0, d = 0, a = 0, w = 0
 
     for (const m of matches) {
@@ -827,8 +880,21 @@ async function fetchPlayer(gameName, tagLine, region) {
       const line = (me.teamPosition || me.individualPosition || '').toUpperCase()
       if (line && line !== 'INVALID') {
         lineCnt[line] = (lineCnt[line] || 0) + 1
+
+        // 챔피언 등장 횟수
         if (!champByLine[line]) champByLine[line] = {}
         champByLine[line][me.championName] = (champByLine[line][me.championName] || 0) + 1
+
+        // 챔피언별 KDA/승패 통계
+        if (!champStatsByLine[line]) champStatsByLine[line] = {}
+        if (!champStatsByLine[line][me.championName])
+          champStatsByLine[line][me.championName] = { games:0, wins:0, kills:0, deaths:0, assists:0 }
+        const cs = champStatsByLine[line][me.championName]
+        cs.games++
+        if (me.win) cs.wins++
+        cs.kills   += me.kills
+        cs.deaths  += me.deaths
+        cs.assists += me.assists
       }
       k += me.kills; d += me.deaths; a += me.assists
       if (me.win) w++
@@ -845,11 +911,11 @@ async function fetchPlayer(gameName, tagLine, region) {
 
     return {
       total, wins: w,
-      lineRatio, topChampsByLine,
+      lineRatio, topChampsByLine, champStatsByLine,
       avgK: (k / Math.max(total,1)).toFixed(1),
       avgD: (d / Math.max(total,1)).toFixed(1),
       avgA: (a / Math.max(total,1)).toFixed(1),
-      kda:  ((k + a) / Math.max(d, 1)).toFixed(2),  // overall KDA
+      kda:  ((k + a) / Math.max(d, 1)).toFixed(2),
     }
   }
 
@@ -882,8 +948,10 @@ async function fetchPlayer(gameName, tagLine, region) {
 let players  = []
 let cardTabs = {}   // index → 'solo' | 'flex'
 
-const getTab = i  => cardTabs[i] || 'solo'
-const setTab = (i, t) => { cardTabs[i] = t; renderCards() }
+const getTab     = i  => cardTabs[i]?.mode || 'solo'
+const getTabLine = i  => cardTabs[i]?.line || null
+const setTab     = (i, t) => { cardTabs[i] = { ...(cardTabs[i]||{}), mode: t, line: null }; renderCards() }
+const setLine    = (i, l) => { cardTabs[i] = { ...(cardTabs[i]||{}), line: cardTabs[i]?.line === l ? null : l }; renderCards() }
 
 /* ── ADD ── */
 async function handleAdd() {
@@ -908,6 +976,7 @@ async function handleAdd() {
   document.getElementById('searchBtn').disabled = true
 
   try {
+    await loadChampKr()  // 한글 챔피언 이름 데이터 로드
     const data = await fetchPlayer(name, tag, region)
     players.push(data)
     document.getElementById('summonerInput').value = ''
@@ -922,7 +991,6 @@ async function handleAdd() {
   }
 }
 
-/* ── REMOVE ── */
 function removePlayer(i) {
   players.splice(i, 1)
   const nt = {}
@@ -994,21 +1062,44 @@ function tierClass(tier) {
 }
 
 function buildCard(p, i) {
-  const tab  = getTab(i)
-  const d    = tab === 'solo' ? p.solo : p.flex
-  const tier = (d.tier || 'UNRANKED').toUpperCase()
-  const tierTxt = tier === 'UNRANKED' ? 'UNRANKED' : `${d.tier} ${d.rank}`
-
+  const tab      = getTab(i)
+  const selLine  = getTabLine(i)
+  const d        = tab === 'solo' ? p.solo : p.flex
+  const tier     = (d.tier || 'UNRANKED').toUpperCase()
+  const tierTxt  = tier === 'UNRANKED' ? 'UNRANKED' : `${d.tier} ${d.rank}`
   const isUnranked = tier === 'UNRANKED' && !d.wins && !d.losses
 
-  const R = 28
-  const C = 2 * Math.PI * R
+  const Rc = 28, C = 2 * Math.PI * Rc
   const wr = d.winRate || 0
   const wrColor = wr >= 55 ? '#4EC890' : wr >= 50 ? '#C8963C' : '#E0404A'
 
-  const lines    = Object.entries(d.lineRatio || {}).sort((a,b) => b[1] - a[1])
-  const topLine  = lines[0]?.[0]
-  const topChamps = topLine ? (d.topChampsByLine?.[topLine] || []) : []
+  const lines = Object.entries(d.lineRatio || {}).sort((a,b) => b[1] - a[1])
+
+  // 라인별 챔피언 패널 HTML
+  const lineChampPanel = selLine
+    ? (() => {
+        const champs = d.topChampsByLine?.[selLine] || []
+        const champStats = d.champStatsByLine?.[selLine] || {}
+        if (!champs.length) return `<div class="no-data-msg" style="padding:8px 0">데이터 없음</div>`
+        return `
+          <div class="line-champ-panel">
+            ${champs.map(c => {
+              const st = champStats[c] || {}
+              const cwr = st.games ? Math.round(st.wins / st.games * 100) : 0
+              const ckda = st.deaths ? ((st.kills + st.assists) / st.deaths).toFixed(1) : 'Perfect'
+              const cwrColor = cwr >= 55 ? '#4EC890' : cwr >= 50 ? '#C8963C' : '#E0404A'
+              return `
+              <div class="lcp-row">
+                <div class="lcp-ico"><img src="${cIcon(c)}" onerror="this.style.display='none'"/></div>
+                <div class="lcp-name">${champKr(c)}</div>
+                <div class="lcp-games">${st.games||0}게임</div>
+                <div class="lcp-wr" style="color:${cwrColor}">${cwr}%</div>
+                <div class="lcp-kda">KDA ${ckda}</div>
+              </div>`
+            }).join('')}
+          </div>`
+      })()
+    : ''
 
   return `
   <div class="pcard" id="pc${i}" style="animation-delay:${i * 0.07}s">
@@ -1038,8 +1129,8 @@ function buildCard(p, i) {
         : `<div class="wr-block">
             <div class="donut">
               <svg width="66" height="66" viewBox="0 0 66 66">
-                <circle class="d-track" cx="33" cy="33" r="${R}"/>
-                <circle class="d-fill"  cx="33" cy="33" r="${R}"
+                <circle class="d-track" cx="33" cy="33" r="${Rc}"/>
+                <circle class="d-fill"  cx="33" cy="33" r="${Rc}"
                   stroke="${wrColor}"
                   stroke-dasharray="${C.toFixed(2)}"
                   stroke-dashoffset="${(C - wr/100*C).toFixed(2)}"/>
@@ -1058,28 +1149,20 @@ function buildCard(p, i) {
           </div>`}
 
       ${lines.length
-        ? `<div class="sec-label">라인 비중 · 최근 ${d.total}게임</div>
+        ? `<div class="sec-label">라인 비중 · 최근 ${d.total}게임 <span style="font-size:0.55rem;color:var(--txt3)">(라인 클릭 시 챔피언 확인)</span></div>
            <div class="line-rows">
              ${lines.map(([line, pct]) => `
-             <div class="line-row">
+             <div class="line-row ${selLine === line ? 'line-selected' : ''}"
+                  onclick="setLine(${i},'${line}')" style="cursor:pointer">
                <div class="line-ico" style="color:${LINE_COLOR[line]||'#888'}">${LINE_ICON[line]||''}</div>
                <div class="line-nm">${LINE_KR[line]||line}</div>
                <div class="line-track"><div class="line-bar ${line}" style="width:${pct}%"></div></div>
                <div class="line-pct">${pct}%</div>
-             </div>`).join('')}
+               <div class="line-arr">${selLine === line ? '▲' : '▼'}</div>
+             </div>
+             ${selLine === line ? lineChampPanel : ''}`).join('')}
            </div>`
         : `<div class="no-data-msg" style="padding:10px 0">최근 매치 데이터 없음</div>`}
-
-      ${topChamps.length
-        ? `<div class="sec-label">주 챔피언 · ${LINE_KR[topLine]||topLine}</div>
-           <div class="champ-row">
-             ${topChamps.slice(0,5).map(c => `
-             <div class="champ-chip">
-               <div class="champ-ico"><img src="${cIcon(c)}" onerror="this.style.display='none'"/></div>
-               ${c.length > 9 ? c.slice(0,8)+'…' : c}
-             </div>`).join('')}
-           </div>`
-        : ''}
     </div>
   </div>`
 }
