@@ -793,8 +793,8 @@ const API_KEY = ''  // Netlify 배포 시 비워두세요 — 환경변수 RIOT_
 /* ════════════════════════════════════════ */
 
 const DDV = '14.10.1'           // DataDragon 버전
-const MATCH_FETCH  = 40         // 가져올 매치 ID 수
-const MATCH_DETAIL = 20         // 상세 조회할 매치 수 (rate limit 고려)
+const MATCH_FETCH  = 20         // 가져올 매치 ID 수
+const MATCH_DETAIL = 10         // 상세 조회할 매치 수 (rate limit 고려)
 const MAX_PLAYERS  = 10
 
 // Vite 프록시 prefix → 실제 host 매핑
@@ -879,16 +879,26 @@ async function fetchPlayer(gameName, tagLine, region) {
       rFetch(r.reg, `/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=420&count=${MATCH_FETCH}`).catch(() => []),
       rFetch(r.reg, `/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=440&count=${MATCH_FETCH}`).catch(() => []),
     ])
-    const loadDetails = ids =>
-      Promise.all(ids.slice(0, MATCH_DETAIL).map(id =>
-        rFetch(r.reg, `/lol/match/v5/matches/${id}`).catch(() => null)
-      )).then(arr => arr.filter(Boolean))
-    ;[soloMatches, flexMatches] = await Promise.all([
-      loadDetails(soloIds),
-      loadDetails(flexIds),
-    ])
+
+    // 순차 처리로 rate limit 방지 (동시 요청 금지)
+    const delay = ms => new Promise(r => setTimeout(r, ms))
+    const loadDetails = async (ids) => {
+      const results = []
+      for (const id of ids.slice(0, MATCH_DETAIL)) {
+        try {
+          const m = await rFetch(r.reg, `/lol/match/v5/matches/${id}`)
+          results.push(m)
+        } catch(e) { /* 개별 실패는 무시 */ }
+        await delay(55)  // 55ms 간격 (초당 최대 18요청)
+      }
+      return results
+    }
+
+    // 솔로/자유 순차 로드
+    soloMatches = await loadDetails(soloIds)
+    flexMatches = await loadDetails(flexIds)
   } catch(e) {
-    console.warn('매치 데이터 로드 실패 (권한 없음):', e.message)
+    console.warn('매치 데이터 로드 실패:', e.message)
   }
 
   // 6. Stats crunch

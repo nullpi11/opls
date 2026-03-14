@@ -51,11 +51,14 @@ exports.handler = async (event) => {
   }
 
   const fullPath = apiPath + (event.rawQuery ? `?${event.rawQuery}` : '')
-  // URL에 한글 등 non-ASCII 문자가 있으면 인코딩 (쿼리스트링 제외)
+  // 경로와 쿼리스트링 분리 후 경로 세그먼트만 인코딩
   const [pathPart, queryPart] = fullPath.split('?')
-  const safePath = pathPart.split('/').map(seg =>
-    seg.includes('%') ? seg : encodeURIComponent(seg)
-  ).join('/') + (queryPart ? `?${queryPart}` : '')
+  const encodedPath = pathPart.split('/').map(seg => {
+    // 이미 %인코딩된 세그먼트는 그대로, 아니면 인코딩
+    try { return decodeURIComponent(seg) === seg ? encodeURIComponent(seg) : seg }
+    catch { return seg }
+  }).join('/')
+  const safePath = encodedPath + (queryPart ? `?${queryPart}` : '')
 
   return new Promise((resolve) => {
     const req = https.get(
