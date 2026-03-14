@@ -733,7 +733,8 @@ select.field { cursor: pointer; }
      API_KEY 는 빈 문자열로 두세요.
      Netlify 환경변수 RIOT_API_KEY 에서 자동으로 읽습니다.
 ════════════════════════════════════════ */
-const API_KEY = 'YOUR_API_KEY_HERE'
+const API_KEY = ''  // Netlify 배포 시 비워두세요 — 환경변수 RIOT_API_KEY 사용
+// 로컬 개발(npm run dev) 시에만 여기에 테스트 키 입력
 /* ════════════════════════════════════════ */
 
 const DDV = '14.10.1'           // DataDragon 버전
