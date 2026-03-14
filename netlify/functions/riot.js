@@ -51,12 +51,16 @@ exports.handler = async (event) => {
   }
 
   const fullPath = apiPath + (event.rawQuery ? `?${event.rawQuery}` : '')
+  // URL에 한글 등 non-ASCII 문자가 있으면 인코딩
+  const safePath = fullPath.split('/').map(seg =>
+    seg.includes('%') ? seg : encodeURIComponent(seg).replace(/%2F/g, '/')
+  ).join('/')
 
   return new Promise((resolve) => {
     const req = https.get(
       {
         hostname: host,
-        path: fullPath,
+        path: safePath,
         headers: { 'X-Riot-Token': API_KEY },
       },
       (res) => {
