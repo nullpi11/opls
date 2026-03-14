@@ -740,7 +740,7 @@ select.field { cursor: pointer; }
   <!-- CHIPS BAR -->
   <div class="chips-bar" id="chipsBar">
     <div class="chips-label">소환사</div>
-    <div class="chips-empty" id="chipsEmpty">추가된 소환사 없음 · 최대 5명</div>
+    <div class="chips-empty" id="chipsEmpty">추가된 소환사 없음 · 최대 10명</div>
   </div>
 
   <!-- COMPARE -->
@@ -778,7 +778,7 @@ const API_KEY = ''  // Netlify 배포 시 비워두세요 — 환경변수 RIOT_
 const DDV = '14.10.1'           // DataDragon 버전
 const MATCH_FETCH  = 40         // 가져올 매치 ID 수
 const MATCH_DETAIL = 20         // 상세 조회할 매치 수 (rate limit 고려)
-const MAX_PLAYERS  = 5
+const MAX_PLAYERS  = 10
 
 // Vite 프록시 prefix → 실제 host 매핑
 const R = {
