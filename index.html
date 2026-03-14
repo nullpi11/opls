@@ -791,13 +791,13 @@ async function fetchPlayer(gameName, tagLine, region) {
     `/riot/account/v1/accounts/by-riot-id/${enc(gameName)}/${enc(tagLine)}`)
   const { puuid } = acct
 
-  // 2. Summoner
+  // 2. Summoner (레벨, 프로필 아이콘용)
   const smn = await rFetch(r.plat,
     `/lol/summoner/v4/summoners/by-puuid/${puuid}`)
 
-  // 3. Rank entries
+  // 3. Rank entries — PUUID로 직접 조회 (Summoner ID 불필요)
   const leagues = await rFetch(r.plat,
-    `/lol/league/v4/entries/by-summoner/${smn.id}`)
+    `/lol/league/v4/entries/by-puuid/${puuid}`)
 
   // 4. Match IDs
   const [soloIds, flexIds] = await Promise.all([
