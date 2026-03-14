@@ -822,15 +822,17 @@ const cIcon = name => `https://ddragon.leagueoflegends.com/cdn/${DDV}/img/champi
 const enc   = s    => encodeURIComponent(s)
 
 /* ── 챔피언 한글 이름 로더 ── */
-let champKrMap = {}  // { "Ahri": "아리", ... }
+let champKrMap = {}     // { "Ahri": "아리", ... }
+let champIdMap = {}     // { "103": "Ahri", ... }  ← ID→영문명
 async function loadChampKr() {
   if (Object.keys(champKrMap).length) return
   try {
     const res  = await fetch(`https://ddragon.leagueoflegends.com/cdn/${DDV}/data/ko_KR/champion.json`)
     const json = await res.json()
-    champKrMap.raw = json.data  // { "Ahri": { key:"103", name:"아리", ... } }
-    for (const [key, val] of Object.entries(json.data))
-      champKrMap[key] = val.name  // { "Ahri": "아리" }
+    for (const [key, val] of Object.entries(json.data)) {
+      champKrMap[key]        = val.name   // { "Ahri": "아리" }
+      champIdMap[val.key]    = key        // { "103": "Ahri" }
+    }
   } catch(e) {
     console.warn('챔피언 한글 데이터 로드 실패:', e)
   }
@@ -873,14 +875,9 @@ async function fetchPlayer(gameName, tagLine, region) {
       .catch(() => []),
   ])
 
-  // 4. 챔피언 ID → 이름 매핑 (DataDragon에서 가져온 전체 챔피언 목록 활용)
-  const champIdToName = {}
-  for (const [engName, val] of Object.entries(champKrMap.raw || {}))
-    champIdToName[val.key] = engName  // key는 숫자 문자열 ID
-
-  // masteries 가공
+  // masteries 가공 — champIdMap으로 ID→영문명 변환
   const topChamps = masteries.map(m => {
-    const engName = champIdToName[String(m.championId)] || String(m.championId)
+    const engName = champIdMap[String(m.championId)] || String(m.championId)
     return {
       name: engName,
       nameKr: champKr(engName),
