@@ -872,22 +872,24 @@ async function fetchPlayer(gameName, tagLine, region) {
   const leagues = await rFetch(r.plat,
     `/lol/league/v4/entries/by-puuid/${puuid}`)
 
-  // 4. Match IDs (솔로/자유 병렬)
-  const [soloIds, flexIds] = await Promise.all([
-    rFetch(r.reg, `/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=420&count=${MATCH_FETCH}`).catch(() => []),
-    rFetch(r.reg, `/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=440&count=${MATCH_FETCH}`).catch(() => []),
-  ])
-
-  // 5. Match details
-  const loadDetails = ids =>
-    Promise.all(ids.slice(0, MATCH_DETAIL).map(id =>
-      rFetch(r.reg, `/lol/match/v5/matches/${id}`).catch(() => null)
-    )).then(arr => arr.filter(Boolean))
-
-  const [soloMatches, flexMatches] = await Promise.all([
-    loadDetails(soloIds),
-    loadDetails(flexIds),
-  ])
+  // 4~5. Match 데이터 (권한 없으면 빈 배열)
+  let soloMatches = [], flexMatches = []
+  try {
+    const [soloIds, flexIds] = await Promise.all([
+      rFetch(r.reg, `/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=420&count=${MATCH_FETCH}`).catch(() => []),
+      rFetch(r.reg, `/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=440&count=${MATCH_FETCH}`).catch(() => []),
+    ])
+    const loadDetails = ids =>
+      Promise.all(ids.slice(0, MATCH_DETAIL).map(id =>
+        rFetch(r.reg, `/lol/match/v5/matches/${id}`).catch(() => null)
+      )).then(arr => arr.filter(Boolean))
+    ;[soloMatches, flexMatches] = await Promise.all([
+      loadDetails(soloIds),
+      loadDetails(flexIds),
+    ])
+  } catch(e) {
+    console.warn('매치 데이터 로드 실패 (권한 없음):', e.message)
+  }
 
   // 6. Stats crunch
   function crunch(matches) {
