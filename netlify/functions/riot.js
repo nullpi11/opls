@@ -31,11 +31,12 @@ exports.handler = async (event) => {
     }
   }
 
-  // event.path 예시: /.netlify/functions/riot/api/kr/lol/summoner/v4/summoners/by-puuid/...
-  const stripped = event.path.replace('/.netlify/functions/riot/', '') // "api/kr/lol/..."
+  // event.path 예시: /.netlify/functions/riot/api/asia/riot/account/v1/...
+  // /.netlify/functions/riot/ 를 제거하면 → api/asia/riot/account/v1/...
+  const stripped = event.path.replace(/^\/.netlify\/functions\/riot\//, '')
   const segments = stripped.split('/')
 
-  // prefix = "api/kr", apiPath = "/lol/summoner/..."
+  // prefix = "api/asia", apiPath = "/riot/account/v1/..."
   const prefix  = segments.slice(0, 2).join('/')
   const apiPath = '/' + segments.slice(2).join('/')
   const host    = HOST_MAP[prefix]
