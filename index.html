@@ -116,7 +116,7 @@ body::after {
 .search-panel {
   background: linear-gradient(140deg, var(--bg3) 0%, var(--bg2) 100%);
   border: 1px solid var(--border);
-  padding: 22px 26px 32px;
+  padding: 0 0 22px;
   margin-bottom: 16px;
   position: relative;
   overflow: hidden;
@@ -126,6 +126,43 @@ body::after {
   content: '';
   position: absolute; top: 0; left: 0; right: 0; height: 1px;
   background: linear-gradient(90deg, transparent, var(--gold) 25%, var(--gold-bright) 50%, var(--gold) 75%, transparent);
+}
+
+/* 검색 모드 탭 */
+.search-mode-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border2);
+  margin-bottom: 18px;
+}
+.smode-tab {
+  padding: 10px 20px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--txt2);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.18s;
+  user-select: none;
+}
+.smode-tab:hover { color: var(--txt); }
+.smode-tab.on { color: var(--gold); border-bottom-color: var(--gold); background: rgba(200,150,60,0.05); }
+
+.search-inner { padding: 0 26px 10px; }
+
+/* 로비 텍스트영역 */
+.lobby-textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 80px;
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+.lobby-preview {
+  flex: 1;
+  font-size: 0.7rem;
+  color: var(--gold);
+  line-height: 1.8;
 }
 
 .search-inner {
@@ -730,7 +767,13 @@ select.field { cursor: pointer; }
 
   <!-- SEARCH -->
   <div class="search-panel">
-    <div class="search-inner">
+    <div class="search-mode-tabs">
+      <div class="smode-tab on" id="smodeManual" onclick="switchSearchMode('manual')">직접 입력</div>
+      <div class="smode-tab" id="smodeLoby" onclick="switchSearchMode('lobby')">로비 텍스트</div>
+    </div>
+
+    <!-- 직접 입력 -->
+    <div class="search-inner" id="searchManual">
       <div class="field-group grow">
         <div class="field-label">소환사명 # 태그</div>
         <div class="combined-input-wrap">
@@ -751,6 +794,29 @@ select.field { cursor: pointer; }
         </select>
       </div>
       <button class="btn-search" id="searchBtn" onclick="handleAdd()">검색 추가</button>
+    </div>
+
+    <!-- 로비 텍스트 붙여넣기 -->
+    <div class="search-inner" id="searchLobby" style="display:none; flex-direction:column; gap:10px;">
+      <div class="field-label">로비 참가 메시지를 전체 붙여넣기 하세요</div>
+      <textarea class="field lobby-textarea" id="lobbyInput"
+        placeholder="예) ⁦NullPi⁩ #⁦Null⁩ 님이 로비에 참가하셨습니다.&#10;⁦one Oclock⁩ #⁦777⁩ 님이 로비에 참가하셨습니다."
+        rows="4" spellcheck="false"></textarea>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <div class="field-group w100">
+          <div class="field-label">서버</div>
+          <select class="field" id="regionSelectLobby">
+            <option value="KR">KR</option>
+            <option value="EUW">EUW</option>
+            <option value="NA">NA</option>
+            <option value="JP">JP</option>
+            <option value="EUN">EUN</option>
+            <option value="BR">BR</option>
+          </select>
+        </div>
+        <div class="lobby-preview" id="lobbyPreview"></div>
+        <button class="btn-search" id="lobbySearchBtn" onclick="handleLobbyAdd()" style="margin-left:auto">전체 검색</button>
+      </div>
     </div>
   </div>
 
@@ -1253,7 +1319,91 @@ function hideOverlay() {
   document.getElementById('overlay').classList.add('off')
 }
 
-/* 입력 힌트 — # 입력 시 이름/태그 분리 미리보기 */
+/* ── 검색 모드 전환 ── */
+function switchSearchMode(mode) {
+  document.getElementById('searchManual').style.display = mode === 'manual' ? '' : 'none'
+  document.getElementById('searchLobby').style.display  = mode === 'lobby'  ? 'flex' : 'none'
+  document.getElementById('smodeManual').classList.toggle('on', mode === 'manual')
+  document.getElementById('smodeLoby').classList.toggle('on', mode === 'lobby')
+}
+
+/* ── 로비 텍스트에서 닉네임#태그 추출 ── */
+function parseLobbyText(text) {
+  const results = []
+  // 유니코드 방향 제어문자 제거 후 파싱
+  const clean = text.replace(/[\u2066\u2069\u202A-\u202E\u200B-\u200F]/g, '')
+  // "닉네임 #태그" 또는 "닉네임#태그" 패턴 추출
+  const regex = /([^\s#\n]+(?:\s[^\s#\n]+)*)\s*#\s*([A-Za-z0-9가-힣]+)/g
+  let match
+  while ((match = regex.exec(clean)) !== null) {
+    const name = match[1].trim()
+    const tag  = match[2].trim()
+    if (name && tag) {
+      const uid = `${name}#${tag}`.toLowerCase()
+      if (!results.find(r => r.uid === uid))
+        results.push({ name, tag, uid })
+    }
+  }
+  return results
+}
+
+/* ── 로비 텍스트 입력 시 미리보기 ── */
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('lobbyInput')?.addEventListener('input', (e) => {
+    const parsed = parseLobbyText(e.target.value)
+    const preview = document.getElementById('lobbyPreview')
+    if (parsed.length) {
+      preview.innerHTML = parsed.map(p =>
+        `<div>✦ ${p.name}<span style="color:var(--txt2)">#${p.tag}</span></div>`
+      ).join('')
+    } else {
+      preview.innerHTML = ''
+    }
+  })
+})
+
+/* ── 로비 전체 검색 ── */
+async function handleLobbyAdd() {
+  const text   = document.getElementById('lobbyInput').value.trim()
+  const region = document.getElementById('regionSelectLobby').value
+  const parsed = parseLobbyText(text)
+
+  if (!parsed.length) { toast('닉네임#태그를 찾을 수 없어요'); return }
+
+  // 이미 추가된 소환사 제외
+  const toAdd = parsed.filter(p =>
+    !players.find(pl => pl.name.toLowerCase() === p.uid)
+  )
+  if (!toAdd.length) { toast('이미 모두 추가된 소환사입니다'); return }
+
+  const available = MAX_PLAYERS - players.length
+  if (available <= 0) { toast(`최대 ${MAX_PLAYERS}명까지 추가할 수 있습니다`); return }
+
+  const targets = toAdd.slice(0, available)
+  document.getElementById('lobbySearchBtn').disabled = true
+
+  await loadChampKr()
+
+  for (const t of targets) {
+    showOverlay(`${t.name}#${t.tag} 불러오는 중… (${targets.indexOf(t)+1}/${targets.length})`)
+    try {
+      const data = await fetchPlayer(t.name, t.tag, region)
+      players.push(data)
+      renderAll()
+    } catch(e) {
+      toast(`${t.name}#${t.tag} 오류: ${e.message}`)
+      console.error(e)
+    }
+  }
+
+  hideOverlay()
+  document.getElementById('lobbySearchBtn').disabled = false
+  document.getElementById('lobbyInput').value = ''
+  document.getElementById('lobbyPreview').innerHTML = ''
+
+  if (toAdd.length > available)
+    toast(`${toAdd.length - available}명은 최대 인원 초과로 추가되지 않았습니다`)
+}
 function updateInputHint(val) {
   const hint = document.getElementById('inputHint')
   if (!hint) return
