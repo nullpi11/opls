@@ -67,6 +67,10 @@ exports.handler = async (event) => {
         let data = ''
         res.on('data', (chunk) => { data += chunk })
         res.on('end', () => {
+          console.log(`[riot] ${host}${fullPath} → ${res.statusCode}`)
+          if (res.statusCode !== 200) {
+            console.log(`[riot] error body: ${data.slice(0, 300)}`)
+          }
           resolve({
             statusCode: res.statusCode,
             headers: {
