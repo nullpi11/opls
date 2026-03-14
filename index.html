@@ -938,7 +938,7 @@ async function fetchPlayer(gameName, tagLine, region) {
       topChampsByLine[l] = Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,5).map(e=>e[0])
 
     return {
-      total, wins: w,
+      total,
       lineRatio, topChampsByLine, champStatsByLine,
       avgK: (k / Math.max(total,1)).toFixed(1),
       avgD: (d / Math.max(total,1)).toFixed(1),
